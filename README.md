@@ -14,7 +14,7 @@ Point your camera / webcam at a whiteboard or a piece of paper, start a session 
 ### Option 1: Remix in Google AI Studio (Easiest)
 If you want to play with the prompts, voice persona, and interaction logic without setting up a local environment:
 
-1. Open this [AI Studio Share Link](https://ai.studio/apps/184fd58a-8fd3-473a-a261-01f704b22858).
+1. Open this [AI Studio Share Link](https://ai.studio/apps/184fd58a-8fd3-473a-a261-01f704b22858?fullscreenApplet=true).
 2. Click the **"Save a Copy"** button in the top right.
 3. This creates a fork in your own Google AI Studio account, ready for you to experiment with. 
 
