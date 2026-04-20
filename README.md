@@ -7,7 +7,6 @@ Point your camera / webcam at a whiteboard or a piece of paper, start a session 
 
 ---
 ![Screenshot of Thia screen in dark mode](readme_imgs/thia_collaborator_dark_mode.png)
-![Screenshot of Thia screen in dark mode](readme_imgs/test.png)
 ---
 
 ## 🚀 How to use this project
