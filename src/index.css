@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer utilities {
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-2 focus-visible:ring-orange-500 focus-visible:ring-offset-white;
+  }
+  .dark .focus-ring {
+    @apply focus-visible:ring-offset-gray-950;
+  }
+}
+
+@layer base {
+  .dark {
+    color-scheme: dark;
+  }
+}

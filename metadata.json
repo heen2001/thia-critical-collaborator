@@ -1,0 +1,9 @@
+{
+  "name": "Thia Critical Collaborator",
+  "description": "A collaborative software architecture and design ideation interface with real-time video, chat, and persistent memory.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": []
+}
