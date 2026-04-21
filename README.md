@@ -6,7 +6,7 @@ Built using **Google AI Studio**, Thia leverages real-time multimodal capabiliti
 Point your camera / webcam at a whiteboard or a piece of paper, start a session and begin talking as you ideate. Thia is designed to promote critical thinking so your ideas will be questioned like a colleague might do so - whilst still contributing ideas for you to build upon. 
 
 ---
-![Screenshot of Thia screen in dark mode](assets/thia_collaborator_dark_mode.png)
+![Screenshot of Thia screen in dark mode](https://github.com/user-attachments/assets/a3adb1d8-5e1f-40f5-b67f-3783ed9ac480)
 ---
 
 ## 🚀 How to use this project
