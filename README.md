@@ -3,7 +3,7 @@
 Thia is an active thinking partner designed for collaborative ideation. Whether in software architecture, design, business strategy, or creative writing, Thia acts as a peer to help you develop your ideas by questioning assumptions, counter-framing gaps, and building on your work in real-time.
 
 Built using **Google AI Studio**, Thia leverages real-time multimodal capabilities—including audio and video feed analysis—to make ideation as natural as speaking with a colleague.
-Point your camera / webcam at a whiteboard or a piece of paper, start a session and begin talking as you ideate. Thia is designed to promote critical thinking so your ideas will be questioned like a colleague might do so - whilst still contributing ideas for ypu to build upon. 
+Point your camera / webcam at a whiteboard or a piece of paper, start a session and begin talking as you ideate. Thia is designed to promote critical thinking so your ideas will be questioned like a colleague might do so - whilst still contributing ideas for you to build upon. 
 
 ---
 ![Screenshot of Thia screen in dark mode](assets/thia_collaborator_dark_mode.png)
