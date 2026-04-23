@@ -334,7 +334,7 @@ export default function App() {
             const recordInterval = 8000;
             if (now - lastRecordedImageTimeRef.current > recordInterval) {
               setMessages(prev => [...prev, { 
-                id: Date.now().toString(), 
+                id: generateId(), 
                 role: 'user', 
                 imageUrl: fullResBase64, // This now uses the transformed canvas image
                 timestamp: new Date() 
@@ -556,7 +556,7 @@ export default function App() {
             if (last && last.role === (role === 'model' ? 'assistant' : 'user') && last.text !== undefined && Date.now() - last.timestamp.getTime() < 5000) {
               return [...prev.slice(0, -1), { ...last, text: last.text + " " + text }];
             }
-            return [...prev, { id: Date.now().toString(), role: role === 'model' ? 'assistant' : 'user', text, timestamp: new Date() }];
+            return [...prev, { id: generateId(), role: role === 'model' ? 'assistant' : 'user', text, timestamp: new Date() }];
           });
         },
         onAudioData: (base64Audio) => {
@@ -754,7 +754,7 @@ export default function App() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
-    const files = Array.from(e.target.files);
+    const files: File[] = Array.from(e.target.files || []);
     
     for (const file of files) {
       if (file.type.startsWith('image/')) {
@@ -1053,7 +1053,7 @@ export default function App() {
               children: [
                 new ImageRun({
                   data: arrayBuffer,
-                  type: "jpeg",
+                  type: "jpg",
                   transformation: {
                     width: 320,
                     height: 180
@@ -1113,8 +1113,10 @@ export default function App() {
     }
   };
 
+  const generateId = () => Date.now().toString() + Math.random().toString();
+
   const addIdea = (text: string, source: 'user' | 'thia', explicitImageUrl?: string) => {
-    const id = Date.now().toString();
+    const id = generateId();
     
     let imageUrl = explicitImageUrl;
     if (!imageUrl && isVideoOn && videoRef.current) {
