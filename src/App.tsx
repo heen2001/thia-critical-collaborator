@@ -87,6 +87,7 @@ interface CapturedIdea {
   timestamp: Date;
   source: 'user' | 'thia';
   imageUrl?: string;
+  isImageMirrored?: boolean;
 }
 
 export default function App() {
@@ -1093,7 +1094,8 @@ export default function App() {
                   type: "jpg",
                   transformation: {
                     width: 320,
-                    height: 180
+                    height: 180,
+                    flip: idea.isImageMirrored ? { horizontal: true, vertical: false } : undefined
                   }
                 })
               ],
@@ -1151,6 +1153,13 @@ export default function App() {
   };
 
   const generateId = () => Date.now().toString() + Math.random().toString();
+
+  const toggleIdeaImageMirror = (ideaId: string) => {
+    setCapturedIdeas(prev => prev.map(idea => 
+      idea.id === ideaId ? { ...idea, isImageMirrored: !idea.isImageMirrored } : idea
+    ));
+    setActiveStickyMenuId(null);
+  };
 
   const addIdea = (text: string, source: 'user' | 'thia', explicitImageUrl?: string, skipImage: boolean = false) => {
     const id = generateId();
@@ -1971,7 +1980,13 @@ export default function App() {
                             <p className="text-base text-[#422006] font-semibold leading-relaxed font-sans mb-3">{idea.text}</p>
                             {idea.imageUrl && (
                               <div className="mb-3 overflow-hidden rounded-md border border-[#422006]/30 w-full bg-black/5">
-                                <img src={idea.imageUrl} alt="Captured Context" className="w-full h-auto object-contain max-h-64" referrerPolicy="no-referrer" />
+                                <img 
+                                  src={idea.imageUrl} 
+                                  alt="Captured Context" 
+                                  className="w-full h-auto object-contain max-h-64" 
+                                  style={{ transform: idea.isImageMirrored ? 'scaleX(-1)' : 'none' }}
+                                  referrerPolicy="no-referrer" 
+                                />
                               </div>
                             )}
                             <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-[#422006]/80 mt-1 gap-4">
@@ -1991,6 +2006,15 @@ export default function App() {
                                     <>
                                       <div className="fixed inset-0 z-40" onClick={() => setActiveStickyMenuId(null)} />
                                       <div className="absolute top-full right-0 mt-1 z-50 w-32 bg-white dark:bg-gray-950 shadow-md border border-gray-200 dark:border-gray-700 rounded-lg py-1 dark:shadow-gray-900/50">
+                                        {idea.imageUrl && (
+                                          <button
+                                            onClick={() => toggleIdeaImageMirror(idea.id)}
+                                            className="w-full flex items-center gap-x-2 py-2 px-3 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 focus-ring transition-colors"
+                                          >
+                                            <FlipHorizontal size={16} />
+                                            Mirror
+                                          </button>
+                                        )}
                                         <button
                                           onClick={() => { setCapturedIdeas(prev => prev.filter(i => i.id !== idea.id)); setActiveStickyMenuId(null); }}
                                           className="w-full flex items-center gap-x-2 py-2 px-3 text-xs text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 focus-ring focus:bg-red-100 dark:focus:bg-red-900 transition-colors dark:text-red-500 dark:hover:bg-red-950 dark:hover:text-red-400 dark:focus:bg-red-950 dark:focus:text-red-400"
@@ -2253,7 +2277,13 @@ export default function App() {
                           <p className="text-base text-[#422006] font-semibold leading-relaxed font-sans mb-3">{idea.text}</p>
                           {idea.imageUrl && (
                             <div className="mb-3 overflow-hidden rounded-md border border-[#422006]/30 w-full bg-black/5">
-                              <img src={idea.imageUrl} alt="Captured Context" className="w-full h-auto object-contain max-h-64" referrerPolicy="no-referrer" />
+                              <img 
+                                src={idea.imageUrl} 
+                                alt="Captured Context" 
+                                className="w-full h-auto object-contain max-h-64" 
+                                style={{ transform: idea.isImageMirrored ? 'scaleX(-1)' : 'none' }}
+                                referrerPolicy="no-referrer" 
+                              />
                             </div>
                           )}
                           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-[#422006]/80 mt-1 gap-4">
@@ -2273,6 +2303,15 @@ export default function App() {
                                   <>
                                     <div className="fixed inset-0 z-40" onClick={() => setActiveStickyMenuId(null)} />
                                     <div className="absolute top-full right-0 mt-1 z-50 w-32 bg-white dark:bg-gray-950 shadow-md border border-gray-200 dark:border-gray-700 rounded-lg py-1 dark:shadow-gray-900/50">
+                                      {idea.imageUrl && (
+                                        <button
+                                          onClick={() => toggleIdeaImageMirror(idea.id)}
+                                          className="w-full flex items-center gap-x-2 py-2 px-3 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 focus-ring transition-colors"
+                                        >
+                                          <FlipHorizontal size={16} />
+                                          Mirror
+                                        </button>
+                                      )}
                                       <button
                                         onClick={() => { setCapturedIdeas(prev => prev.filter(i => i.id !== idea.id)); setActiveStickyMenuId(null); }}
                                         className="w-full flex items-center gap-x-2 py-2 px-3 text-xs text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900 focus-ring focus:bg-red-100 dark:focus:bg-red-900 transition-colors dark:text-red-500 dark:hover:bg-red-950 dark:hover:text-red-400 dark:focus:bg-red-950 dark:focus:text-red-400"
