@@ -168,7 +168,34 @@ export default function App() {
   const [isNarrow, setIsNarrow] = useState(false);
   const [highlightedIdeaId, setHighlightedIdeaId] = useState<string | null>(null);
   const [isLandscape, setIsLandscape] = useState(() => typeof window !== 'undefined' ? window.innerWidth > window.innerHeight : false);
-  const [isVideoMirrored, setIsVideoMirrored] = useState(true);
+  const [isVideoMirrored, setIsVideoMirroredState] = useState(true);
+  const isVideoMirroredRef = useRef(true);
+
+  // Sync ref
+  useEffect(() => {
+    isVideoMirroredRef.current = isVideoMirrored;
+  }, [isVideoMirrored]);
+  
+  const setIsVideoMirrored = (val: boolean | ((prev: boolean) => boolean)) => {
+    setIsVideoMirroredState(val);
+  };
+
+  const toggleVideoMirror = () => {
+    setIsVideoMirroredState(prev => !prev);
+    
+    // Invert pan and rotation to keep the framed contents identical and just mirrored
+    setVideoPan(p => {
+      const pan = { x: -p.x, y: p.y };
+      videoPanRef.current = pan;
+      return pan;
+    });
+    setVideoRotation(r => {
+      const rot = -r;
+      videoRotationRef.current = rot;
+      return rot;
+    });
+  };
+
   const chatEndRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const panelContainerRef = useRef<HTMLDivElement>(null);
@@ -288,12 +315,23 @@ export default function App() {
         if (shouldCapture) {
           lastFrameDataRef.current = currentFrame; // ONLY update reference when we actually decide to send
           
-          // Use an aspect ratio for the AI feed that exactly matches the camera feed
-          const videoAspect = video.videoWidth / video.videoHeight;
-          canvas.height = 270;
-          canvas.width = Math.round(270 * videoAspect);
+          // Use an aspect ratio for the canvas that exactly matches the container's viewable area
+          let clientWidth = 480;
+          let clientHeight = 270;
+          if (videoContainerRef.current) {
+            clientWidth = videoContainerRef.current.clientWidth;
+            clientHeight = videoContainerRef.current.clientHeight;
+          }
+          const containerAspect = clientWidth / clientHeight || 16/9;
           
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // Max dimension 480 to keep payload size reasonable
+          const scale = Math.min(1, 480 / Math.max(clientWidth, clientHeight));
+          canvas.width = clientWidth * scale;
+          canvas.height = clientHeight * scale;
+          
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
           ctx.save();
           
           // 1. Apply transforms matching UI (center-origin)
@@ -305,25 +343,29 @@ export default function App() {
           const currentZoom = videoZoomRef.current;
           const currentPan = videoPanRef.current;
 
-          // Pan values are in screen pixels. Need to map them to canvas pixels
-          let scaleFactor = 1;
-          if (videoContainerRef.current && video) {
-            const { clientWidth, clientHeight } = videoContainerRef.current;
-            const containerAspect = clientWidth / clientHeight;
-            const videoAspect = video.videoWidth / video.videoHeight;
-            const videoDisplayWidth = containerAspect > videoAspect ? clientHeight * videoAspect : clientWidth;
-            scaleFactor = canvas.width / videoDisplayWidth;
-          }
-          const canvasPanX = currentPan.x * scaleFactor;
-          const canvasPanY = currentPan.y * scaleFactor;
+          // Pan values are in screen pixels. Need to map them to canvas resolution scale
+          const canvasPanX = currentPan.x * scale;
+          const canvasPanY = currentPan.y * scale;
 
           // Pan is applied in "canvas space"
           ctx.translate(canvasPanX, canvasPanY);
           ctx.rotate((currentRotation * Math.PI) / 180);
           ctx.scale(currentZoom, currentZoom);
+          if (isVideoMirroredRef.current) {
+            ctx.scale(-1, 1);
+          }
           
-          // 2. Draw video matching the aspect ratio perfectly
-          ctx.drawImage(video, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
+          // 2. Draw video with object-contain logic matching UI
+          const videoAspect = video.videoWidth / video.videoHeight;
+          let dw, dh;
+          if (videoAspect > containerAspect) {
+            dw = canvas.width;
+            dh = canvas.width / videoAspect;
+          } else {
+            dh = canvas.height;
+            dw = canvas.height * videoAspect;
+          }
+          ctx.drawImage(video, -dw / 2, -dh / 2, dw, dh);
           ctx.restore();
           
           const fullResBase64 = canvas.toDataURL('image/jpeg', 0.6);
@@ -1119,27 +1161,45 @@ export default function App() {
       const tCanvas = document.createElement('canvas');
       const ctx = tCanvas.getContext('2d');
       if (ctx && video.videoWidth > 0) {
-        const videoAspect = video.videoWidth / video.videoHeight;
-        tCanvas.height = 270;
-        tCanvas.width = Math.round(270 * videoAspect);
+        let clientWidth = 480;
+        let clientHeight = 270;
+        if (videoContainerRef.current) {
+          clientWidth = videoContainerRef.current.clientWidth;
+          clientHeight = videoContainerRef.current.clientHeight;
+        }
+        const containerAspect = clientWidth / clientHeight || 16/9;
+        
+        const scale = Math.min(1, 480 / Math.max(clientWidth, clientHeight));
+        tCanvas.width = clientWidth * scale;
+        tCanvas.height = clientHeight * scale;
+        
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, tCanvas.width, tCanvas.height);
         
         ctx.translate(tCanvas.width / 2, tCanvas.height / 2);
 
-        let scaleFactor = 1;
-        if (videoContainerRef.current) {
-          const { clientWidth, clientHeight } = videoContainerRef.current;
-          const containerAspect = clientWidth / clientHeight;
-          const videoDisplayWidth = containerAspect > videoAspect ? clientHeight * videoAspect : clientWidth;
-          scaleFactor = tCanvas.width / videoDisplayWidth;
-        }
-        const canvasPanX = videoPanRef.current.x * scaleFactor;
-        const canvasPanY = videoPanRef.current.y * scaleFactor;
+        // Map pan to canvas scale
+        const canvasPanX = videoPanRef.current.x * scale;
+        const canvasPanY = videoPanRef.current.y * scale;
         
         ctx.translate(canvasPanX, canvasPanY);
         ctx.rotate((videoRotationRef.current * Math.PI) / 180);
         ctx.scale(videoZoomRef.current, videoZoomRef.current);
+        if (isVideoMirroredRef.current) {
+          ctx.scale(-1, 1);
+        }
         
-        ctx.drawImage(video, -tCanvas.width / 2, -tCanvas.height / 2, tCanvas.width, tCanvas.height);
+        const videoAspect = video.videoWidth / video.videoHeight;
+        let dw, dh;
+        if (videoAspect > containerAspect) {
+          dw = tCanvas.width;
+          dh = tCanvas.width / videoAspect;
+        } else {
+          dh = tCanvas.height;
+          dw = tCanvas.height * videoAspect;
+        }
+        
+        ctx.drawImage(video, -dw / 2, -dh / 2, dw, dh);
         imageUrl = tCanvas.toDataURL('image/jpeg', 0.8);
       }
     }
@@ -1316,7 +1376,7 @@ export default function App() {
                 {isVideoOn ? (
                   <div className="relative w-full h-full flex items-center justify-center overflow-hidden pointer-events-none">
                     <div 
-                      className="w-full h-full flex items-center justify-center transition-transform duration-300 origin-center"
+                      className="w-full h-full flex items-center justify-center origin-center"
                       style={{ 
                         transform: `translate(${videoPan.x}px, ${videoPan.y}px) rotate(${videoRotation}deg) scale(${videoZoom})` 
                       }}
@@ -1471,7 +1531,7 @@ export default function App() {
                               </div>
                               <div className="flex flex-col items-center gap-1.5 w-16">
                                 <button 
-                                  onClick={() => { setIsVideoMirrored(prev => !prev); setIsMobileMenuOpen(false); }}
+                                  onClick={() => { toggleVideoMirror(); setIsMobileMenuOpen(false); }}
                                   disabled={!isVideoOn}
                                   className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none focus-ring ${isVideoMirrored ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                                 >
@@ -1591,7 +1651,7 @@ export default function App() {
 
                     <div className="flex flex-col items-center gap-2 min-w-[60px]">
                       <button 
-                        onClick={() => setIsVideoMirrored(prev => !prev)}
+                        onClick={() => toggleVideoMirror()}
                         disabled={!isVideoOn}
                         className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:pointer-events-none border-none focus-ring ${isVideoMirrored ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
                       >
@@ -1910,8 +1970,8 @@ export default function App() {
                           >
                             <p className="text-base text-[#422006] font-semibold leading-relaxed font-sans mb-3">{idea.text}</p>
                             {idea.imageUrl && (
-                              <div className="mb-3 overflow-hidden rounded-md border border-[#422006]/30 w-full aspect-video">
-                                <img src={idea.imageUrl} alt="Captured Context" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="mb-3 overflow-hidden rounded-md border border-[#422006]/30 w-full bg-black/5">
+                                <img src={idea.imageUrl} alt="Captured Context" className="w-full h-auto object-contain max-h-64" referrerPolicy="no-referrer" />
                               </div>
                             )}
                             <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-[#422006]/80 mt-1 gap-4">
@@ -2192,8 +2252,8 @@ export default function App() {
                         >
                           <p className="text-base text-[#422006] font-semibold leading-relaxed font-sans mb-3">{idea.text}</p>
                           {idea.imageUrl && (
-                            <div className="mb-3 overflow-hidden rounded-md border border-[#422006]/30 w-full aspect-video">
-                              <img src={idea.imageUrl} alt="Captured Context" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <div className="mb-3 overflow-hidden rounded-md border border-[#422006]/30 w-full bg-black/5">
+                              <img src={idea.imageUrl} alt="Captured Context" className="w-full h-auto object-contain max-h-64" referrerPolicy="no-referrer" />
                             </div>
                           )}
                           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-[#422006]/80 mt-1 gap-4">
