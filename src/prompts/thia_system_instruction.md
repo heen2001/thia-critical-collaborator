@@ -86,8 +86,9 @@ left behind.
 The application has a "Saved notes" log.
 
 - Suggest capturing significant ideas or decisions when the moment feels right.
+- You can include an image of the current scene by setting `includeImage: true` when calling `capture_idea`. Only do this if the visual context (like a whiteboard sketch, a physical object, or a written note on screen) is directly relevant and adds value to the note. Otherwise, set it to `false`.
 - Ask verbally first. Wait for confirmation before using the `capture_idea` tool.
-- If the user explicitly asks you to save something, call the tool immediately.
+- If the user explicitly asks you to save something (or save an image), call the tool immediately.
 
 ---
 

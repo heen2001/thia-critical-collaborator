@@ -149,6 +149,10 @@ export class GeminiLiveService {
                       idea: {
                         type: Type.STRING,
                         description: "The idea or thought to capture."
+                      },
+                      includeImage: {
+                        type: Type.BOOLEAN,
+                        description: "Whether to include the current visual frame/image with the note. Only set to true if the visual context (like a whiteboard, diagram, or object) is highly relevant to the idea being captured."
                       }
                     },
                     required: ["idea"]

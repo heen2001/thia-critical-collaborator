@@ -148,6 +148,7 @@ export default function App() {
   const lastCaptureTimeRef = useRef<number>(0);
   const lastRecordedImageTimeRef = useRef<number>(0);
   const lastFrameDataRef = useRef<Uint8ClampedArray | null>(null);
+  const lastSentImageUrlRef = useRef<string | undefined>(undefined);
   const motionDetectedRef = useRef<boolean>(false);
   
   const [stagedFiles, setStagedFiles] = useState<{name: string, content: string, imageUrl?: string}[]>([]);
@@ -262,7 +263,7 @@ export default function App() {
         let isFirstFrame = false;
         if (lastFrameDataRef.current) {
           for (let i = 0; i < currentFrame.length; i += 4) {
-            // Compare brightness (R+G+B)/3
+            // Compare brightness (R+G+B)/3 against the LAST SENT frame
             const oldAvg = (lastFrameDataRef.current[i] + lastFrameDataRef.current[i+1] + lastFrameDataRef.current[i+2]) / 3;
             const newAvg = (currentFrame[i] + currentFrame[i+1] + currentFrame[i+2]) / 3;
             diff += Math.abs(newAvg - oldAvg);
@@ -271,21 +272,26 @@ export default function App() {
           isFirstFrame = true;
         }
         
-        // Sensitivity threshold: increased to 15 (300% of original baseline 5) to balance camera jitter vs intentional movement
-        const threshold = (motionCanvas.width * motionCanvas.height) * 15;
+        // Sensitivity threshold: 12 (balanced for camera noise)
+        const threshold = (motionCanvas.width * motionCanvas.height) * 12;
         const hasMotion = isFirstFrame || diff > threshold;
         motionDetectedRef.current = hasMotion;
-        lastFrameDataRef.current = currentFrame;
 
-        // Adaptive timing: 
-        // - If motion detected (drawing/moving): send every 1s
-        // - If no motion: don't send to LLM (saves tokens/bandwidth), but send a keep-alive every 10s if we strictly need to. Actually, Gemini live API can just stay quiet. Let's only send if motion.
-        const captureInterval = 1000;
+        // Time since last capture
+        const timeSinceLastCapture = now - lastCaptureTimeRef.current;
+        
+        // Send under two conditions:
+        // 1. Significant change has occurred, and at least 2 seconds have passed (rate limiting)
+        // 2. OR, it's been more than 10 seconds (keep-alive to keep AI context fresh)
+        const shouldCapture = (hasMotion && timeSinceLastCapture >= 2000) || timeSinceLastCapture >= 10000;
 
-        if (hasMotion && now - lastCaptureTimeRef.current >= captureInterval) {
-          // Use a fixed 16:9 aspect ratio for the AI feed to match the UI container
-          canvas.width = 480;
+        if (shouldCapture) {
+          lastFrameDataRef.current = currentFrame; // ONLY update reference when we actually decide to send
+          
+          // Use an aspect ratio for the AI feed that exactly matches the camera feed
+          const videoAspect = video.videoWidth / video.videoHeight;
           canvas.height = 270;
+          canvas.width = Math.round(270 * videoAspect);
           
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           ctx.save();
@@ -299,26 +305,25 @@ export default function App() {
           const currentZoom = videoZoomRef.current;
           const currentPan = videoPanRef.current;
 
+          // Pan values are in screen pixels. Need to map them to canvas pixels
+          let scaleFactor = 1;
+          if (videoContainerRef.current && video) {
+            const { clientWidth, clientHeight } = videoContainerRef.current;
+            const containerAspect = clientWidth / clientHeight;
+            const videoAspect = video.videoWidth / video.videoHeight;
+            const videoDisplayWidth = containerAspect > videoAspect ? clientHeight * videoAspect : clientWidth;
+            scaleFactor = canvas.width / videoDisplayWidth;
+          }
+          const canvasPanX = currentPan.x * scaleFactor;
+          const canvasPanY = currentPan.y * scaleFactor;
+
           // Pan is applied in "canvas space"
-          ctx.translate(currentPan.x, currentPan.y);
+          ctx.translate(canvasPanX, canvasPanY);
           ctx.rotate((currentRotation * Math.PI) / 180);
           ctx.scale(currentZoom, currentZoom);
           
-          // 2. Draw video with object-cover logic centered at 0,0
-          const videoAspect = video.videoWidth / video.videoHeight;
-          const canvasAspect = canvas.width / canvas.height;
-          let dw, dh;
-          
-          if (videoAspect > canvasAspect) {
-            dh = canvas.height;
-            dw = canvas.height * videoAspect;
-          } else {
-            dw = canvas.width;
-            dh = canvas.width / videoAspect;
-          }
-          
-          // Draw centered at 0,0 (which is now the canvas center + pan + rotation)
-          ctx.drawImage(video, -dw / 2, -dh / 2, dw, dh);
+          // 2. Draw video matching the aspect ratio perfectly
+          ctx.drawImage(video, -canvas.width / 2, -canvas.height / 2, canvas.width, canvas.height);
           ctx.restore();
           
           const fullResBase64 = canvas.toDataURL('image/jpeg', 0.6);
@@ -326,13 +331,14 @@ export default function App() {
           
           if (base64) {
             liveServiceRef.current.sendVideoFrame(base64);
+            lastSentImageUrlRef.current = fullResBase64;
             lastCaptureTimeRef.current = now;
             setIsSendingFrame(true);
             setTimeout(() => setIsSendingFrame(false), 500);
 
             // Chat recording logic: only record if significant motion has occurred, max 1 every 8 seconds locally to prevent spam
             const recordInterval = 8000;
-            if (now - lastRecordedImageTimeRef.current > recordInterval) {
+            if (hasMotion && now - lastRecordedImageTimeRef.current > recordInterval) {
               setMessages(prev => [...prev, { 
                 id: generateId(), 
                 role: 'user', 
@@ -586,23 +592,12 @@ export default function App() {
             toolCall.functionCalls.forEach((fc: any) => {
               if (fc.name === 'capture_idea') {
                 const idea = fc.args.idea;
+                const includeImage = fc.args.includeImage === true;
                 
-                // Extract current frame from the AI message if available, otherwise addIdea grabs it automatically
-                let capturedImageUrl = undefined;
-                setMessages(prev => {
-                  for (let i = prev.length - 1; i >= 0; i--) {
-                    if (prev[i].role === 'assistant' || prev[i].role === 'user') {
-                       if (prev[i].imageUrl) {
-                          capturedImageUrl = prev[i].imageUrl;
-                          break;
-                       }
-                       if (Date.now() - prev[i].timestamp.getTime() > 10000) break; // don't look too far back
-                    }
-                  }
-                  return prev;
-                });
+                // Use the last frame we actually sent to Thia, ensuring it matches what she saw
+                const capturedImageUrl = includeImage ? lastSentImageUrlRef.current : undefined;
                 
-                const ideaId = addIdea(idea, 'thia', capturedImageUrl);
+                const ideaId = addIdea(idea, 'thia', capturedImageUrl, !includeImage);
                 
                 // Send response back immediately
                 liveServiceRef.current?.sendToolResponse({
@@ -1115,34 +1110,36 @@ export default function App() {
 
   const generateId = () => Date.now().toString() + Math.random().toString();
 
-  const addIdea = (text: string, source: 'user' | 'thia', explicitImageUrl?: string) => {
+  const addIdea = (text: string, source: 'user' | 'thia', explicitImageUrl?: string, skipImage: boolean = false) => {
     const id = generateId();
     
     let imageUrl = explicitImageUrl;
-    if (!imageUrl && isVideoOn && videoRef.current) {
+    if (!skipImage && !imageUrl && isVideoOn && videoRef.current) {
       const video = videoRef.current;
       const tCanvas = document.createElement('canvas');
       const ctx = tCanvas.getContext('2d');
       if (ctx && video.videoWidth > 0) {
-        tCanvas.width = 480;
+        const videoAspect = video.videoWidth / video.videoHeight;
         tCanvas.height = 270;
-        ctx.translate(tCanvas.width / 2, tCanvas.height / 2);
+        tCanvas.width = Math.round(270 * videoAspect);
         
-        ctx.translate(videoPanRef.current.x, videoPanRef.current.y);
+        ctx.translate(tCanvas.width / 2, tCanvas.height / 2);
+
+        let scaleFactor = 1;
+        if (videoContainerRef.current) {
+          const { clientWidth, clientHeight } = videoContainerRef.current;
+          const containerAspect = clientWidth / clientHeight;
+          const videoDisplayWidth = containerAspect > videoAspect ? clientHeight * videoAspect : clientWidth;
+          scaleFactor = tCanvas.width / videoDisplayWidth;
+        }
+        const canvasPanX = videoPanRef.current.x * scaleFactor;
+        const canvasPanY = videoPanRef.current.y * scaleFactor;
+        
+        ctx.translate(canvasPanX, canvasPanY);
         ctx.rotate((videoRotationRef.current * Math.PI) / 180);
         ctx.scale(videoZoomRef.current, videoZoomRef.current);
         
-        const videoAspect = video.videoWidth / video.videoHeight;
-        const canvasAspect = tCanvas.width / tCanvas.height;
-        let dw, dh;
-        if (videoAspect > canvasAspect) {
-          dh = tCanvas.height;
-          dw = tCanvas.height * videoAspect;
-        } else {
-          dw = tCanvas.width;
-          dh = tCanvas.width / videoAspect;
-        }
-        ctx.drawImage(video, -dw / 2, -dh / 2, dw, dh);
+        ctx.drawImage(video, -tCanvas.width / 2, -tCanvas.height / 2, tCanvas.width, tCanvas.height);
         imageUrl = tCanvas.toDataURL('image/jpeg', 0.8);
       }
     }
@@ -1318,16 +1315,21 @@ export default function App() {
               >
                 {isVideoOn ? (
                   <div className="relative w-full h-full flex items-center justify-center overflow-hidden pointer-events-none">
-                    <video 
-                      ref={videoRef} 
-                      autoPlay 
-                      playsInline 
-                      muted 
-                      className="w-full h-full object-contain transition-transform duration-300"
+                    <div 
+                      className="w-full h-full flex items-center justify-center transition-transform duration-300 origin-center"
                       style={{ 
-                        transform: `translate(${videoPan.x}px, ${videoPan.y}px) rotate(${videoRotation}deg) scale(${videoZoom}) scaleX(${isVideoMirrored ? -1 : 1})` 
+                        transform: `translate(${videoPan.x}px, ${videoPan.y}px) rotate(${videoRotation}deg) scale(${videoZoom})` 
                       }}
-                    />
+                    >
+                      <video 
+                        ref={videoRef} 
+                        autoPlay 
+                        playsInline 
+                        muted 
+                        className="w-full h-full object-contain"
+                        style={{ transform: `scaleX(${isVideoMirrored ? -1 : 1})` }}
+                      />
+                    </div>
                     <AnimatePresence>
                       {isSendingFrame && (
                         <motion.div 
